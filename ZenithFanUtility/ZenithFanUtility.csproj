@@ -132,6 +132,7 @@
     <Compile Include="Form3.Designer.cs">
       <DependentUpon>Form3.cs</DependentUpon>
     </Compile>
+    <Compile Include="NativeLibrary.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="StartupTask.cs" />
     <Compile Include="SystemLauncher.cs" />
@@ -171,11 +172,19 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
+  <!-- single exe: the fan library is compiled in and AsusWinIO64.dll is embedded, then extracted and loaded
+       at startup by NativeLibrary.cs. the AsusFanControl project stays in the solution as the command-line tool -->
   <ItemGroup>
-    <ProjectReference Include="..\AsusFanControl\AsusFanControl.csproj">
-      <Project>{df94635e-4107-4ee9-8675-7137e750bc86}</Project>
-      <Name>AsusFanControl</Name>
-    </ProjectReference>
+    <Compile Include="..\AsusFanControl\AsusControl.cs">
+      <Link>AsusFanControl\AsusControl.cs</Link>
+    </Compile>
+    <Compile Include="..\AsusFanControl\AsusWinIO64.cs">
+      <Link>AsusFanControl\AsusWinIO64.cs</Link>
+    </Compile>
+    <EmbeddedResource Include="..\AsusFanControl\AsusWinIO64.dll">
+      <Link>AsusFanControl\AsusWinIO64.dll</Link>
+      <LogicalName>AsusWinIO64.dll</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">

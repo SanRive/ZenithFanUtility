@@ -73,6 +73,16 @@ namespace ZenithFanUtility
             // windows drops that message on its way into an elevated/SYSTEM process unless it is allowed through
             ChangeWindowMessageFilter(RegisterWindowMessage("TaskbarCreated"), MSGFLT_ADD);
 
+            try
+            {
+                NativeLibrary.LoadAsusWinIO();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"{ex.Message}\n\n{ex.InnerException?.Message}", AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
             Application.Run(new Form1(args));
             GC.KeepAlive(instanceMutex);
         }
