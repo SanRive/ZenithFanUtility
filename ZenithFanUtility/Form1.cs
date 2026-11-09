@@ -56,9 +56,35 @@ namespace ZenithFanUtility
             return false;
         }
 
+        private const int WM_POWERBROADCAST = 0x0218;
+        private const int PBT_APMRESUMEAUTOMATIC = 0x0012;
+        private const int PBT_POWERSETTINGCHANGE = 0x8013;
+        private const int DEVICE_NOTIFY_WINDOW_HANDLE = 0;
+        private static readonly Guid GUID_CONSOLE_DISPLAY_STATE = new Guid("6fe69556-704a-47a0-8f24-c28d936fda47");
+
+        [StructLayout(LayoutKind.Sequential, Pack = 4)]
+        private struct POWERBROADCAST_SETTING
+        {
+            public Guid PowerSetting;
+            public int DataLength;
+            public int Data;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr RegisterPowerSettingNotification(IntPtr hRecipient, ref Guid powerSettingGuid, int flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnregisterPowerSettingNotification(IntPtr handle);
+
+        private IntPtr displayStateNotification = IntPtr.Zero;
+        private bool lastDisplayOn = true;
+
         AsusControl asusControl = new AsusControl();
         int fanSpeed = 0;
         private Timer timer;
+        private Timer fanKeepAliveTimer;
+        private Timer resumeReapplyTimer;
+        private int resumeReapplyTicksLeft;
         NotifyIcon trayIcon;
         private int lastCpuTemp = 0;
         private bool isTempRising = true;
@@ -131,6 +157,16 @@ namespace ZenithFanUtility
             // initialize the timer but do not subscribe or start it here
             timer = new Timer();
 
+            fanKeepAliveTimer = new Timer { Interval = 30000 };
+            fanKeepAliveTimer.Tick += (s, e) => ReapplyFanSettings();
+            resumeReapplyTimer = new Timer { Interval = 5000 };
+            resumeReapplyTimer.Tick += (s, e) =>
+            {
+                ReapplyFanSettings();
+                if (--resumeReapplyTicksLeft <= 0)
+                    resumeReapplyTimer.Stop();
+            };
+
             Properties.Settings.Default.Reload();
 
             if (Properties.Settings.Default.TimerRefreshRate < numericUpDown1.Minimum ||
@@ -162,6 +198,83 @@ namespace ZenithFanUtility
             base.SetVisibleCore(value);
         }
 
+        // the embedded controller drops back to automatic fan control after sleep/hibernate (and
+        // sometimes on its own), so the current target is rewritten every 30s and right after resume
+        private void ReapplyFanSettings()
+        {
+            try
+            {
+                if (Properties.Settings.Default.FanCurveEnabled)
+                {
+                    ApplyFanCurve((int)asusControl.Thermal_Read_Cpu_Temperature());
+                }
+                else if (checkBoxTurnOn.Checked && fanSpeed > 0)
+                {
+                    asusControl.SetFanSpeed(fanSpeed, 0);
+                    asusControl.SetFanSpeed(fanSpeed, 1);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Fan reapply error: " + ex.Message);
+            }
+        }
+
+        private void OnResumed()
+        {
+            // the controller can take a few seconds after wake before it accepts writes, so retry a few times
+            ReapplyFanSettings();
+            resumeReapplyTicksLeft = 4;
+            resumeReapplyTimer.Stop();
+            resumeReapplyTimer.Start();
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            // modern standby (S0 low power idle) sends no resume broadcast, so watch for the display coming back on.
+            // the handle is recreated whenever ShowInTaskbar changes, so this re-registers each time
+            Guid displayState = GUID_CONSOLE_DISPLAY_STATE;
+            displayStateNotification = RegisterPowerSettingNotification(Handle, ref displayState, DEVICE_NOTIFY_WINDOW_HANDLE);
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            if (displayStateNotification != IntPtr.Zero)
+            {
+                UnregisterPowerSettingNotification(displayStateNotification);
+                displayStateNotification = IntPtr.Zero;
+            }
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_POWERBROADCAST)
+            {
+                int eventType = m.WParam.ToInt32();
+                if (eventType == PBT_APMRESUMEAUTOMATIC)
+                {
+                    // resume from hibernate (or S3 sleep on machines that have it)
+                    OnResumed();
+                }
+                else if (eventType == PBT_POWERSETTINGCHANGE && m.LParam != IntPtr.Zero)
+                {
+                    var setting = Marshal.PtrToStructure<POWERBROADCAST_SETTING>(m.LParam);
+                    bool displayOn = setting.PowerSetting == GUID_CONSOLE_DISPLAY_STATE && setting.Data != 0;
+                    if (displayOn && !lastDisplayOn)
+                    {
+                        OnResumed();
+                    }
+                    if (setting.PowerSetting == GUID_CONSOLE_DISPLAY_STATE)
+                    {
+                        lastDisplayOn = displayOn;
+                    }
+                }
+            }
+            base.WndProc(ref m);
+        }
+
         private void ButtonToggleFanCurve_Click(object sender, EventArgs e)
         {
             Properties.Settings.Default.FanCurveEnabled = !Properties.Settings.Default.FanCurveEnabled;
@@ -175,6 +288,8 @@ namespace ZenithFanUtility
             {
                 components?.Dispose();
                 timer?.Dispose();
+                fanKeepAliveTimer?.Dispose();
+                resumeReapplyTimer?.Dispose();
                 trayIcon?.Dispose();
                 AppDomain.CurrentDomain.ProcessExit -= OnProcessExit; // unsubscribe processexit
                 if (asusControl is IDisposable disposableControl)
@@ -225,6 +340,7 @@ namespace ZenithFanUtility
                 fanSpeed = -1;
                 setFanSpeed();
             }
+            fanKeepAliveTimer.Start();
 
             if (Environment.GetCommandLineArgs().Contains("-tray"))
             {
