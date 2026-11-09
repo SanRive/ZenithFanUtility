@@ -217,6 +217,15 @@ namespace ZenithFanUtility
                 timer.Start();
             }
 
+            // LoadSettings primes fanSpeed with the saved value, so setFanSpeed's "unchanged" check
+            // skipped the hardware write and the saved speed never reached the fans at startup
+            if (manualModeRadioButton.Checked && checkBoxTurnOn.Checked)
+            {
+                Properties.Settings.Default.FanCurveEnabled = false;
+                fanSpeed = -1;
+                setFanSpeed();
+            }
+
             if (Environment.GetCommandLineArgs().Contains("-tray"))
             {
                 WindowState = FormWindowState.Minimized;
