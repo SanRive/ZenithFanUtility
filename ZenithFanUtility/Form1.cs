@@ -342,11 +342,51 @@ namespace ZenithFanUtility
             }
             fanKeepAliveTimer.Start();
 
+            // keep the task's definition current with this build and exe location (the app normally runs as SYSTEM here)
+            Task.Run(() => StartupTask.RefreshIfElevated());
+
             if (Environment.GetCommandLineArgs().Contains("-tray"))
             {
                 WindowState = FormWindowState.Minimized;
                 MinimizeToTray();
             }
+
+            ListenForShowRequests();
+        }
+
+        // opening the exe again (or the launcher that started this instance) sets the show event to bring the window up
+        private void ListenForShowRequests()
+        {
+            System.Threading.EventWaitHandle showEvent;
+            try
+            {
+                showEvent = SystemLauncher.CreateShowEvent();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Show event unavailable: " + ex.Message);
+                return;
+            }
+
+            var listener = new System.Threading.Thread(() =>
+            {
+                while (showEvent.WaitOne())
+                {
+                    try
+                    {
+                        BeginInvoke((Action)RestoreFromTray);
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException || ex is ObjectDisposedException)
+                    {
+                        return; // window is gone; the app is exiting
+                    }
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "ShowRequestListener",
+            };
+            listener.Start();
         }
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
@@ -420,7 +460,7 @@ namespace ZenithFanUtility
 
         private void toolStripMenuItemCheckForUpdates_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("https://github.com/realMoai/ZenithFanUtility");
+            SystemLauncher.OpenUrl("https://github.com/realMoai/ZenithFanUtility");
         }
 
         private void RadioButton_Mode_CheckedChanged(object sender, EventArgs e)
@@ -671,31 +711,22 @@ namespace ZenithFanUtility
 
         private void startWithWindowsToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            startWithWindowsToolStripMenuItem.Checked = !startWithWindowsToolStripMenuItem.Checked;
-            Properties.Settings.Default.boot = startWithWindowsToolStripMenuItem.Checked;
-            Properties.Settings.Default.Save();
-            SetStartup(startWithWindowsToolStripMenuItem.Checked);
-        }
-        private void SetStartup(bool enable)
-        {
-            string runKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-            string appName = "AsusFanControl";
+            bool enable = !startWithWindowsToolStripMenuItem.Checked;
 
-            // the path now includes the "-tray" argument for starting minimized
-            // the quotes are added to handle spaces in the file path
-            string appPath = $"\"{Application.ExecutablePath}\" -tray";
-
-            using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(runKey, true))
+            // creating the logon task needs admin, so this may show a uac prompt
+            if (!StartupTask.Set(enable, out string message))
             {
-                if (enable)
-                {
-                    key.SetValue(appName, appPath);
-                }
-                else
-                {
-                    key.DeleteValue(appName, false);
-                }
+                if (message != null)
+                    MessageBox.Show(message, "Start with Windows", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
             }
+
+            startWithWindowsToolStripMenuItem.Checked = enable;
+            Properties.Settings.Default.boot = enable;
+            Properties.Settings.Default.Save();
+
+            if (message != null)
+                ShowInfoPopup(message, "Start with Windows");
         }
 
         private void ApplyDarkMode()
@@ -910,7 +941,8 @@ namespace ZenithFanUtility
             fanSpeed = Properties.Settings.Default.fanSpeed;
             trackBarFanSpeed.Value = fanSpeed;
             checkBoxTurnOn.Checked = Properties.Settings.Default.CustomControlEnabled;
-            startWithWindowsToolStripMenuItem.Checked = Properties.Settings.Default.boot;
+            // the task is the source of truth; the saved setting differs between the user and SYSTEM profiles
+            startWithWindowsToolStripMenuItem.Checked = StartupTask.IsStartupEnabled();
 
             // this is the new block for loading the radio button state
             string lastMode = Properties.Settings.Default["LastSelectedMode"] as string;

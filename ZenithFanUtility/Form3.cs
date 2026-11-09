@@ -113,37 +113,37 @@ namespace ZenithFanUtility
 
         private void linkLabel1_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            System.Diagnostics.Process.Start("https://github.com/Karmel0x/AsusFanControl");
+            SystemLauncher.OpenUrl("https://github.com/Karmel0x/AsusFanControl");
         }
 
         private void linkLabel2_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            System.Diagnostics.Process.Start("https://github.com/Darren80/AsusFanControlEnhanced");
+            SystemLauncher.OpenUrl("https://github.com/Darren80/AsusFanControlEnhanced");
         }
 
         private void linkLabel3_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            System.Diagnostics.Process.Start("https://github.com/pgain88/AsusFanControlRemastered");
+            SystemLauncher.OpenUrl("https://github.com/pgain88/AsusFanControlRemastered");
         }
 
         private void pictureBox1_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("https://github.com/realMoai");
+            SystemLauncher.OpenUrl("https://github.com/realMoai");
         }
 
         private void pictureBox2_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("https://discord.com/users/622764600475254784");
+            SystemLauncher.OpenUrl("https://discord.com/users/622764600475254784");
         }
 
         private void pictureBox3_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("mailto:d44330019@gmail.com");
+            SystemLauncher.OpenUrl("mailto:d44330019@gmail.com");
         }
 
         private void pictureBox4_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("https://www.buymeacoffee.com/zenithfanutility");
+            SystemLauncher.OpenUrl("https://www.buymeacoffee.com/zenithfanutility");
         }
     }
 }
