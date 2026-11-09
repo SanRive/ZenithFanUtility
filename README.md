@@ -26,39 +26,41 @@ Zenith Fan Utility provides a comprehensive toolset to take full control of your
 
 1.  Go to the [**Releases**](https://github.com/realMoai/ZenithFanUtility/releases) page.
 2.  Download the `ZenithFanUtility_vX.X.X.zip` file from the latest release's **Assets** section.
-3.  Run `ZenithFanUtility.exe`.
+3.  Run `ZenithFanUtility.exe`. It is a single file: nothing else needs to sit next to it.
 
 > [!IMPORTANT]
-> It is highly recommended to **run the application as an administrator** to ensure it has the necessary permissions to control your system's hardware.
+> Windows asks for administrator permission (UAC) when you open the app. Zenith Fan Utility then starts itself with **SYSTEM** privileges, which newer ASUS drivers require for fan control. It does this through a scheduled task named `ZenithFanUtility`, so no extra tools are needed.
 
 ---
 ## Prerequisites & Troubleshooting
 
 ### ASUS System Control Interface
 
-> [!WARNING]
-> The latest versions of **Asus System Control Interface (v3.1.41.0+)** may restrict access to the driver required for manual fan control. If Zenith Fan Utility isn't working, you likely need to downgrade this driver.
+> [!NOTE]
+> The latest versions of **Asus System Control Interface (v3.1.41.0+)** only accept fan commands from processes running as SYSTEM. Zenith Fan Utility handles this automatically (see above), so PsExec is no longer needed.
 
-**Method 1: Roll Back the Driver (Recommended)**
+**If fan control still doesn't work, roll back the driver:**
 1.  [Uninstall the latest Asus System Control Interface](https://github.com/seerge/g-helper/wiki/Troubleshooting#reinstalling-asus-system-control-interface).
 2.  Install a previous version, like [**v3.1.40.0**](https://dlcdnets.asus.com/pub/ASUS/GamingNB/Image/Software/SoftwareandUtility/16402/ASUSSystemControlInterfacev3_ASUS_Z_V3.1.40.0_16402.exe).
 3.  If Windows Update overrides it, go to `Device Manager -> System Devices -> Asus System Control Interface`, then select `Driver -> Roll Back Driver`.
 
-**Method 2: Run as SYSTEM Process (Advanced)**
-If you are unable to roll back the driver, you can force the app to run with SYSTEM privileges.
-1.  Download and extract [PSTools](https://download.sysinternals.com/files/PSTools.zip).
-2.  Place `PsExec.exe` into the same folder as `ZenithFanUtility.exe`.
-3.  Run PowerShell as an Administrator in that folder and execute:
-    ```powershell
-    ./psexec -i -s "$PWD\ZenithFanUtility.exe"
-    ```
+### Command-line options
+* `-tray` starts minimized to the tray.
+* `-nosystem` skips the SYSTEM hand-off and runs the app as the current user, as older versions did. Fan control then needs an older driver (see above) and running as administrator.
+
+### Settings location
+Settings are stored per account and per exe location. Because the app normally runs as SYSTEM, they live under `C:\Windows\System32\config\systemprofile\AppData\Local\ZenithFanUtility`, and moving the exe to another folder starts with default settings.
+
+### Uninstalling
+Exit the app from its tray icon, then remove its scheduled task from an administrator terminal with `schtasks /Delete /TN ZenithFanUtility /F` and delete the exe.
 
 ---
 ## How to Use
 
 * **Master Control:** The "Enable Custom Fan Control" checkbox is the master switch. When checked, the app takes over your system's default fan behavior.
 * **Mode Selection:** Use the radio buttons to switch between **Manual Mode** (slider is active), **Fan Curve 1**, or **Fan Curve 2**. When a fan curve is active, the manual slider is disabled.
-* **Tray Icon:** The app lives in your system tray. A single left-click on the icon will show or hide the main window. Right-clicking provides options to show or exit the application completely.
+* **Tray Icon:** The app lives in your system tray. A single left-click on the icon will show or hide the main window. Right-clicking provides options to show or exit the application completely. Opening the exe again while it is running also brings the window up.
+* **Start with Windows:** Starts the app at logon, after sleep or hibernation, and again within 5 minutes if it is ever closed. Your fan settings are re-applied after waking from sleep or Modern Standby, and every 30 seconds in case the laptop's controller takes fan control back.
 
 ---
 ## Acknowledgments
