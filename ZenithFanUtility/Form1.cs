@@ -85,6 +85,8 @@ namespace ZenithFanUtility
         private Timer fanKeepAliveTimer;
         private Timer resumeReapplyTimer;
         private int resumeReapplyTicksLeft;
+        private int appliedFanPercent = 0;
+        private DateTime lastTrayTooltipUpdate = DateTime.MinValue;
         NotifyIcon trayIcon;
         private int lastCpuTemp = 0;
         private bool isTempRising = true;
@@ -116,11 +118,7 @@ namespace ZenithFanUtility
                 Icon = Icon,
                 Visible = false,
                 ContextMenu = new ContextMenu(new MenuItem[] {
-        new MenuItem("Show", (s1, e1) =>
-        {
-            Show();
-            trayIcon.Visible = false;
-        }),
+        new MenuItem("Show", (s1, e1) => RestoreFromTray()),
         new MenuItem("Exit", (s1, e1) =>
         {
             isReallyExiting = true;
@@ -128,19 +126,21 @@ namespace ZenithFanUtility
         }),
     }),
             };
+            // refresh the tooltip while hovering so it shows the live rpm, not whatever the last stats tick saw
+            trayIcon.MouseMove += (s, e) => UpdateTrayTooltip();
             trayIcon.MouseClick += (s, e) =>
             {
                 if (e.Button == MouseButtons.Left)
                 {
                     // toggle the form's visibility
-                    if (this.Visible)
+                    // after a -tray start the form is "visible" but minimized with no taskbar button
+                    if (this.Visible && this.WindowState != FormWindowState.Minimized)
                     {
                         this.Hide();
                     }
                     else
                     {
-                        this.Show();
-                        this.Activate(); // important: this brings the form to the front
+                        RestoreFromTray();
                     }
                 }
             };
@@ -547,6 +547,7 @@ namespace ZenithFanUtility
         {
             string fanCurveStatus = Properties.Settings.Default.FanCurveEnabled ? $" ({fanCurveType} Active)" : "";
             label1.Text = $"Fan Speed: {speed}%{fanCurveStatus}";
+            appliedFanPercent = speed;
 
             // update trackbarfanspeed to match the label's value
             if (trackBarFanSpeed.Value != speed)
@@ -616,6 +617,56 @@ namespace ZenithFanUtility
             }
             this.Hide();
             this.ShowInTaskbar = false;
+        }
+
+        // e.g. "CPU fan: 75% | 4200 RPM" per fan. pass fanRpms when they were just read; otherwise they're
+        // read here, throttled because MouseMove fires continuously while hovering
+        private void UpdateTrayTooltip(List<int> fanRpms = null)
+        {
+            if (trayIcon == null)
+                return;
+            if (fanRpms == null && (DateTime.Now - lastTrayTooltipUpdate).TotalMilliseconds < 1000)
+                return;
+            lastTrayTooltipUpdate = DateTime.Now;
+
+            try
+            {
+                if (fanRpms == null)
+                    fanRpms = asusControl.GetFanSpeeds();
+
+                bool controlled = Properties.Settings.Default.FanCurveEnabled || (checkBoxTurnOn.Checked && appliedFanPercent > 0);
+                string percent = controlled ? $"{appliedFanPercent}%" : "Auto";
+                string[] fanNames = { "CPU", "GPU" };
+
+                var lines = new List<string>();
+                for (int i = 0; i < (fanRpms?.Count ?? 0); i++)
+                {
+                    string name = i < fanNames.Length ? fanNames[i] : $"Fan {i + 1}";
+                    lines.Add($"{name} fan: {percent} | {fanRpms[i]} RPM");
+                }
+                string text = lines.Count > 0 ? string.Join("\n", lines) : $"Fans: {percent}";
+
+                // NotifyIcon.Text throws above 63 characters
+                trayIcon.Text = text.Length > 63 ? text.Substring(0, 63) : text;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Tray tooltip error: " + ex.Message);
+            }
+        }
+
+        // undoes MinimizeToTray: Show() alone leaves the window minimized and off the taskbar
+        private void RestoreFromTray()
+        {
+            this.ShowInTaskbar = true; // recreates the handle, so the dark title bar is reapplied below
+            this.Show();
+            if (this.WindowState == FormWindowState.Minimized)
+            {
+                this.WindowState = FormWindowState.Normal;
+            }
+            SetDarkModeTitleBar(this.Handle);
+            PositionFormNextToTray();
+            this.Activate(); // important: this brings the form to the front
         }
 
         private void startWithWindowsToolStripMenuItem_Click(object sender, EventArgs e)
@@ -973,13 +1024,7 @@ namespace ZenithFanUtility
                     lastRpmString = currentRpmString;
                 }
 
-                if (trayIcon != null)
-                {
-                    // also use the smart string in the tooltip
-                    string tooltipText = $"CPU: {cpuTemp}°C | GPU: {gpuTempText}";
-                    if (fanSpeeds != null && fanSpeeds.Count > 0) tooltipText += $"\nFans: {fanSpeeds[0]} RPM";
-                    trayIcon.Text = tooltipText;
-                }
+                UpdateTrayTooltip(fanSpeeds);
 
                 if (Properties.Settings.Default.FanCurveEnabled)
                 {
