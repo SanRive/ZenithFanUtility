@@ -1,5 +1,8 @@
 # Zenith Fan Utility
 
+> [!NOTE]
+> This is a fork of [realMoai/ZenithFanUtility](https://github.com/realMoai/ZenithFanUtility). A big thank you to **realMoai** for creating Zenith Fan Utility and sharing it as open source. The changes in this fork (running as SYSTEM without PsExec, a single-exe build, and fan re-apply fixes) were only possible thanks to that work. They are proposed upstream in [realMoai/ZenithFanUtility#4](https://github.com/realMoai/ZenithFanUtility/pull/4).
+
 <p align="center">
   <img src="https://github.com/user-attachments/assets/2b680b93-4c25-46db-a384-e90ab6d851ff" alt="Zenith Fan Utility Screenshot" width="450px" />
 </p>
